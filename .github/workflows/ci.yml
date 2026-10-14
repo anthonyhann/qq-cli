@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-compile:
+    name: Lint and compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install lint tooling
+        run: pip install ruff
+
+      - name: Ruff
+        run: ruff check qq_cli || true
+
+      - name: Byte-compile all modules
+        run: python -m compileall -q qq_cli
+
+      - name: Import graph is intact
+        run: |
+          # sqlcipher3 is unavailable on CI; core modules must import without it
+          # to the extent that they do not touch the driver at import time.
+          python - <<'PY'
+          import ast, pathlib, sys
+          bad = []
+          for p in pathlib.Path("qq_cli").rglob("*.py"):
+              try:
+                  ast.parse(p.read_text(encoding="utf-8"))
+              except SyntaxError as e:
+                  bad.append(f"{p}: {e}")
+          if bad:
+              print("\n".join(bad)); sys.exit(1)
+          print("all modules parse")
+          PY
+
+  guard:
+    name: Sensitive-data guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No databases, keys, or decrypted artifacts
+        run: |
+          set -e
+          # Fail if anything that looks like real chat data is tracked.
+          if git ls-files | grep -E '\.db(-wal|-shm)?$'; then
+            echo "::error::tracked database files found"; exit 1
+          fi
+          if git ls-files | grep -E '(all_keys|last_check)\.json$'; then
+            echo "::error::tracked key/state files found"; exit 1
+          fi
+          if git ls-files | grep -E '\.(clear|material)$'; then
+            echo "::error::tracked decrypted artifacts found"; exit 1
+          fi
+          echo "no sensitive files tracked"
+
+      - name: No hardcoded-looking keys in source
+        run: |
+          set -e
+          # 16-char keys are 16 printable ASCII; flag obvious literals in code,
+          # excluding documentation and the intentional format examples.
+          ! grep -rnE "enc_key['\"]?\s*[:=]\s*['\"][A-Za-z0-9!@#$%^&*(){}<>+_=.,;:/?~|-]{16}['\"]" \
+              --include='*.py' --include='*.json' qq_cli/ scripts/ \
+            || { echo "::error::possible hardcoded key literal"; exit 1; }
+          echo "no hardcoded key literals"

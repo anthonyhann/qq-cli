@@ -1,0 +1,59 @@
+#!/usr/bin/expect -f
+# QQ NT key extraction via lldb (ad-hoc copy route)
+# Usage: expect scripts/extract_key.exp <QQ_PID>
+set timeout 600
+set qqpid [lindex $argv 0]
+if {$qqpid == ""} { puts "usage: expect extract_key.exp <QQ_PID>"; exit 1 }
+
+log_file -a "/tmp/qq_key_extract.log"
+spawn lldb -p $qqpid --one-line "command script import /Users/hanqiang/www/ai/qq-cli/scripts/qq_key_extractor.py"
+
+# 1. wait for attach to complete
+expect {
+    -re {Process [0-9]+ stopped} { puts "\n>>> attached" }
+    -re {error:} { puts "\n>>> ATTACH FAILED"; exit 1 }
+    timeout { puts "\n>>> attach timeout"; exit 1 }
+}
+expect -re {\(lldb\)}
+
+# 2. let QQ boot so wrapper.node is loaded
+send "process continue\r"
+after 20000
+
+# 3. interrupt
+send "\003"
+expect -re {\(lldb\)}
+
+# 4. confirm wrapper.node is present
+send "image list -o -f | grep wrapper.node\r"
+expect {
+    -re {wrapper\.node} { puts "\n>>> wrapper.node loaded" }
+    timeout { puts "\n>>> wrapper.node NOT loaded"; exit 1 }
+}
+expect -re {\(lldb\)}
+
+# 5. set breakpoint now that modules are registered
+send "qq-setbp\r"
+expect {
+    -re {断点已设置} { puts "\n>>> breakpoint set" }
+    -re {未找到 wrapper} { puts "\n>>> module still missing"; exit 1 }
+    timeout { puts "\n>>> setbp timeout" }
+}
+expect -re {\(lldb\)}
+
+# 6. resume; user clicks 登录 in the copy window
+send "c\r"
+
+# 7. wait for the key
+expect {
+    -re {KEY\s+:\s*(\S+)} {
+        puts "\n>>> GOT KEY: $expect_out(1,string)"
+        set fh [open "/tmp/qq_key_result.txt" "w"]
+        puts $fh $expect_out(1,string)
+        close $fh
+    }
+    -re {login\.db} { puts "\n>>> saw login.db key (skipped), still waiting..." ; exp_continue }
+    timeout { puts "\n>>> TIMEOUT: click 登录 in the COPY QQ window" }
+}
+after 5000
+exit 0
