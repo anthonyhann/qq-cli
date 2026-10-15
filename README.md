@@ -38,6 +38,7 @@ as structured JSON, so agents and scripts can query it without scraping the UI.
 | `contacts` | Friends list and profile lookup |
 | `unread` | Conversations with new messages |
 | `new-messages` | Incremental new messages (persistent checkpoint) |
+| `export-media` | Export images/files out of the local media cache |
 | `keys` | Key management and verification |
 | `init` | Locate account directory, import and validate keys |
 
@@ -211,7 +212,46 @@ Note that `40003` and `40850` have **different meanings** between the c2c and gr
 Messages that fail Protobuf parsing degrade to `"(unparsed)"` with
 `"parse_status": "failed"` instead of aborting the command.
 
+## Exporting media
+
+```bash
+qq-cli export-media "Group name" --out ./export
+qq-cli export-media "Group name" --out ./export --report     # report only, copy nothing
+qq-cli export-media 648974225 --start-time 2026-10-14 --out ./export
+qq-cli export-media "Group name" --out ./export --kind image --kind doc
+qq-cli export-media "Group name" --out ./export --orphans    # also list unreferenced files
+```
+
+Output layout:
+
+```
+export/
+  images/001-1014-1640-TeacherLi-836381b8.png
+  files/002-1014-1705-TeacherZhou-worksheet.pdf
+  index.md             attachments inlined in chronological order
+  export-report.json   full metadata + the missing list
+```
+
+**Read this before relying on it.** QQ only caches media you have actually opened in the
+client. Unopened attachments exist solely as a server-side `fileid` handle, and fetching
+them over HTTP returns `retcode -5103009` because the request needs a signature that only
+the QQ client can produce. There is no way around this from outside the client.
+
+So the export is **best-effort by design**. The command never hides a gap: everything it
+could not export is listed under `missing`, with sender and timestamp, so you know exactly
+which messages to open in QQ before re-running.
+
+Two details worth knowing:
+
+- There is **no local path registry** (`rich_media.db`'s `file_table` is empty in the builds
+  tested), so files are located by scanning `nt_data/` and matching the **MD5** declared in
+  the message — uppercase in the message, lowercase on disk.
+- The **declared extension is not trustworthy**. Files announced as `.mp4` turned out to be
+  JPEG. The exporter sniffs the file header and corrects both the extension and the reported
+  kind, recording the change as `ext_corrected` in the report.
+
 ## Limitations
+
 
 - **Location-scoped data** — QQ only syncs a recent slice of history to a new device or
   install. The account you query may hold partial history; the full record stays in the
