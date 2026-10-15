@@ -38,6 +38,7 @@ QQ CLI 以**只读**方式解密，并把数据以结构化 JSON 暴露出来，
 | `contacts` | 好友列表与资料查询 |
 | `unread` | 有新消息的会话 |
 | `new-messages` | 增量新消息（状态持久化） |
+| `export-media` | 把本地缓存中的图片/文件导出到指定目录 |
 | `keys` | 密钥管理与校验 |
 | `init` | 定位账号目录、导入并校验密钥 |
 
@@ -211,7 +212,42 @@ QQ NT 的数据库**不是**普通 SQLite，磁盘布局如下：
 Protobuf 解析失败的消息会降级为 `"(unparsed)"` 并带 `"parse_status": "failed"`，
 而**不会**中断整条命令。
 
+## 导出媒体
+
+```bash
+qq-cli export-media "群名" --out ./export
+qq-cli export-media "群名" --out ./export --report          # 只报告，不复制文件
+qq-cli export-media 648974225 --start-time 2026-10-14 --out ./export
+qq-cli export-media "群名" --out ./export --kind image --kind doc
+qq-cli export-media "群名" --out ./export --orphans         # 同时列出无消息引用的孤立文件
+```
+
+输出结构：
+
+```
+export/
+  images/001-1014-1640-数学高老师-836381b8.png
+  files/002-1014-1705-语文周老师-课堂练习题.pdf
+  index.md             附件按时间顺序内联
+  export-report.json   完整元数据 + 缺失清单
+```
+
+**使用前请先了解这个前提。** QQ 只会缓存你在客户端里**实际打开过**的媒体。
+没打开过的附件在本地只留下一个服务端的 `fileid` 句柄，而直接 HTTP 请求会返回
+`retcode -5103009` —— 因为请求需要 QQ 客户端才能生成的签名。**客户端之外无法绕过。**
+
+所以导出是**尽力而为（best-effort）的**。命令绝不会掩盖缺口：所有导不出来的附件都会
+列在 `missing` 里，带发送者和时间，让你清楚知道该在 QQ 里打开哪几条消息再重跑。
+
+两个值得知道的细节：
+
+- **没有本地路径注册表**（实测 `rich_media.db` 的 `file_table` 为空），因此只能扫描
+  `nt_data/` 目录并用消息里声明的 **MD5** 匹配 —— 消息里是大写，磁盘上是小写。
+- **声明的扩展名不可信**。实测有声明为 `.mp4` 的文件其实是 JPEG。导出时会读取文件头
+  纠正扩展名与类型，并在报告里以 `ext_corrected` 记录这一改动。
+
 ## 已知限制
+
 
 - **数据受登录来源限制** —— QQ 在新设备/新安装上只同步**近期一部分**历史。
   你所查询的账号可能只有部分记录，完整历史仍在原始安装的容器中。

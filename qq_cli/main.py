@@ -41,6 +41,7 @@ def cli(ctx, config_path):
 
 
 from .commands.contacts import contacts
+from .commands.export_media import export_media_cmd
 from .commands.groups import groups, members
 from .commands.history import history
 from .commands.init import init
@@ -59,6 +60,7 @@ cli.add_command(groups)
 cli.add_command(members)
 cli.add_command(unread)
 cli.add_command(new_messages)
+cli.add_command(export_media_cmd)
 
 
 if __name__ == "__main__":
