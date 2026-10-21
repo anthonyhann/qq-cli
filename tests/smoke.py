@@ -1,7 +1,8 @@
 """端到端冒烟测试 —— 用真实 QQ 数据验证各层。"""
 import sys
+from pathlib import Path
 
-sys.path.insert(0, "/Users/user/www/ai/qq-cli")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from qq_cli.core.context import AppContext
 from qq_cli.core.messages import list_conversations, query_messages, search_messages

@@ -3,7 +3,7 @@ import lldb
 import struct
 
 _PATHS = ["/Applications/QQ.app/Contents/Resources/app/wrapper.node",
-          "/Users/user/www/ai/qq-cli/.qqrun/QQ.app/Contents/Resources/app/wrapper.node"]
+          "/tmp/qqrun/QQ.app/Contents/Resources/app/wrapper.node"]
 
 def _find_func_va(path):
     with open(path, "rb") as f:

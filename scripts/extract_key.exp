@@ -6,7 +6,8 @@ set qqpid [lindex $argv 0]
 if {$qqpid == ""} { puts "usage: expect extract_key.exp <QQ_PID>"; exit 1 }
 
 log_file -a "/tmp/qq_key_extract.log"
-spawn lldb -p $qqpid --one-line "command script import /Users/user/www/ai/qq-cli/scripts/qq_key_extractor.py"
+set script_dir [file dirname [file normalize [info script]]]
+spawn lldb -p $qqpid --one-line "command script import $script_dir/extract_key.py"
 
 # 1. wait for attach to complete
 expect {
